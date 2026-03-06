@@ -29,14 +29,4 @@ impl Storage {
             None => Ok(None),
         }
     }
-
-    #[allow(dead_code)]
-    pub fn delete_ratchet_session(&self, peer_pubkey: &str) -> anyhow::Result<()> {
-        let db = self.db.lock().unwrap();
-        db.execute(
-            "DELETE FROM dm_ratchet_sessions WHERE peer_pubkey=?1",
-            params![peer_pubkey],
-        )?;
-        Ok(())
-    }
 }

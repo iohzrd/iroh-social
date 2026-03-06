@@ -28,8 +28,8 @@ A self-hosted, headless server binary that provides aggregation, discovery, sear
   Users opt-in           | - Iroh node        |   HTTP API
   via signed    -------> | - Gossip listener  | <-------  Clients query for
   registration           | - Sync puller      |           search, trending,
-                         | - sqlx (SQLite or  |           discovery
-                         |   Postgres)        |
+                         | - sqlx (SQLite)    |           discovery
+                         |                    |
                          | - axum HTTP server |
                          +--------------------+
                                   |
@@ -39,7 +39,7 @@ A self-hosted, headless server binary that provides aggregation, discovery, sear
                           Iroh node
 ```
 
-The server runs its own Iroh endpoint and joins the same gossip topics and sync protocol that regular clients use. It stores an aggregated index of all registered users' posts using sqlx (SQLite for small deployments, Postgres for scale) with full-text search. An axum HTTP API exposes this index for search, trending, user discovery, and aggregated feeds.
+The server runs its own Iroh endpoint and joins the same gossip topics and sync protocol that regular clients use. It stores an aggregated index of all registered users' posts using sqlx with SQLite and FTS5 full-text search. An axum HTTP API exposes this index for search, trending, user discovery, and aggregated feeds.
 
 Key principle: **the server is an overlay, not a replacement**. The P2P layer remains the foundation. Users who never connect to a server lose nothing. Servers add opt-in social features that require aggregation (search, trending, discovery).
 
@@ -47,28 +47,31 @@ Key principle: **the server is an overlay, not a replacement**. The P2P layer re
 
 ## Workspace Structure
 
-The repo becomes a Cargo workspace with three crates:
+The repo is already a Cargo workspace. The shared types crate (`crates/iroh-social-types/`) exists and is used by the Tauri app. The server crate is the new addition.
 
 ```
-iroh-tauri-app/
-  Cargo.toml                      # Workspace root (new)
+iroh-social/
+  Cargo.toml                      # Workspace root (existing)
   crates/
-    iroh-social-types/            # Shared types and protocol definitions (new)
+    iroh-social-types/            # Shared types and protocol definitions (existing)
       Cargo.toml
       src/
         lib.rs
-        types.rs                  # Post, Profile, MediaAttachment, FollowEntry
-        protocol.rs               # GossipMessage, SyncRequest/Response, SYNC_ALPN, user_feed_topic()
-        validation.rs             # validate_post(), constants
-        crypto.rs                 # Registration signing/verification types
+        types.rs                  # Post, Profile, MediaAttachment, Interaction, FollowEntry, FollowerEntry
+        protocol.rs               # GossipMessage, SyncRequest/SyncSummary/SyncFrame (incl. DeviceAnnouncements), SYNC_ALPN (v4), user_feed_topic()
+        signing.rs                # sign_post(), verify_post_signature(), sign_interaction(), verify_interaction_signature(), sign_profile(), verify_profile_signature(), sign/verify delete messages
+        validation.rs             # validate_post(), validate_interaction(), validate_profile(), constants
+        dm.rs                     # DmHandshake, EncryptedEnvelope, DirectMessage, DM_ALPN, etc.
+        devices.rs                # DeviceCertificate, LinkedDevicesAnnouncement, DeviceRevocation, etc. (added by linked-devices feature)
+        registration.rs           # RegistrationPayload, RegistrationRequest, sign_registration(), verify_registration_signature()
     iroh-social-server/           # Server binary (new)
       Cargo.toml
-      migrations/                 # sqlx migrations (SQLite + Postgres variants)
+      migrations/                 # sqlx migrations (SQLite)
       src/
         main.rs                   # CLI entry, config loading, startup
         config.rs                 # TOML config parsing
         node.rs                   # Iroh endpoint, gossip, sync setup
-        storage.rs                # sqlx storage (SQLite or Postgres)
+        storage.rs                # sqlx storage (SQLite)
         ingestion.rs              # Gossip subscriber + sync scheduler
         trending.rs               # Trending computation
         api/
@@ -79,42 +82,17 @@ iroh-tauri-app/
           posts.rs                # GET /api/v1/posts/search
           feed.rs                 # GET /api/v1/feed
           trending.rs             # GET /api/v1/trending
-  src-tauri/                      # Existing Tauri app (modified to use shared crate)
+  src-tauri/                      # Existing Tauri app (uses shared crate)
   src/                            # Existing Svelte frontend
 ```
 
-### What moves to the shared crate
+### Shared crate status
 
-From `src-tauri/src/storage.rs`:
+The types crate already contains all shared types, protocols, signing, and validation logic. The Tauri app already imports from `iroh-social-types`. No further extraction is needed -- the server crate simply adds `iroh-social-types` as a dependency.
 
-- `Post`, `Profile`, `MediaAttachment`, `FollowEntry` structs
+When the linked-devices feature lands, the types crate gains `devices.rs` with `DeviceCertificate`, `LinkedDevicesAnnouncement`, `DeviceRevocation`, etc. The `GossipMessage` enum gains `LinkedDevices` and `DeviceRevocation` variants, and the existing `DeletePost` and `DeleteInteraction` variants gain `device_pubkey` and `signature` fields for verified deletion. The server must handle all of these (see [Device-Aware Verification](#device-aware-verification)).
 
-From `src-tauri/src/gossip.rs`:
-
-- `GossipMessage` enum
-- `user_feed_topic()` function
-
-From `src-tauri/src/sync.rs`:
-
-- `SyncRequest`, `SyncResponse` structs
-- `SYNC_ALPN` constant
-
-From `src-tauri/src/lib.rs`:
-
-- `validate_post()` function and validation constants
-
-The Tauri crate then imports these from `iroh-social-types` instead of defining them inline.
-
-### Shared crate dependencies (minimal)
-
-```toml
-[dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
-iroh-gossip = "0.96"   # for TopicId
-ed25519-dalek = { version = "2", features = ["serde"] }
-```
+**Note**: The shared crate's `signing.rs` utility functions `signature_to_hex()` and `hex_to_signature()` are made `pub` as part of the linked-devices work, since they are needed by `devices.rs`, `registration.rs`, and any other module that performs Ed25519 signature hex encoding.
 
 ---
 
@@ -122,21 +100,23 @@ ed25519-dalek = { version = "2", features = ["serde"] }
 
 ### Design
 
-Single-step signed registration over HTTP. The user signs a payload with their Iroh secret key (ed25519) to prove identity. No challenge-response needed -- the payload includes server URL and timestamp to prevent replay.
+Single-step signed registration over HTTP. The user signs a payload with their identity key (ed25519) to prove identity. No challenge-response needed -- the payload includes server URL and timestamp to prevent replay.
+
+**Linked-devices note**: Registration requires the identity key signature, so only the primary device can register/unregister. Secondary devices cannot register independently -- they inherit the registration via their identity's primary device. The server ingests posts from all authorized devices of a registered identity (verified via cached device certificates).
 
 ### Registration flow
 
 1. User constructs a `RegistrationPayload`:
    ```
-   { pubkey, server_url, timestamp }
+   { pubkey, server_url, timestamp, action: None }
    ```
-2. Serializes it deterministically (canonical JSON or a fixed `pubkey|server_url|timestamp` string).
-3. Signs the bytes with their ed25519 secret key.
+2. Serializes it using canonical JSON (`serde_json::to_vec(&serde_json::json!({...}))`) -- the same pattern used for signing posts, interactions, and profiles throughout the codebase.
+3. Signs the bytes with their ed25519 identity key using `sign_registration()` from the shared crate.
 4. POSTs a `RegistrationRequest` to the server:
    ```
-   { pubkey, server_url, timestamp, signature }
+   { pubkey, server_url, timestamp, action: null, signature }
    ```
-5. Server verifies:
+5. Server verifies using `verify_registration_signature()` from the shared crate:
    - Timestamp within 5 minutes of server time
    - `server_url` matches the server's own URL
    - Signature is valid for the pubkey over the reconstructed payload bytes
@@ -144,24 +124,63 @@ Single-step signed registration over HTTP. The user signs a payload with their I
 
 ### Unregistration
 
-Same mechanism: sign a payload with `action: "unregister"`, send to `DELETE /api/v1/register`. Server stops ingesting posts and marks user inactive.
+Same mechanism with `action: Some("unregister")`: user constructs a `RegistrationPayload` with `action: Some("unregister".to_string())`, signs it with `sign_registration()`, and sends to `DELETE /api/v1/register`. Server verifies with `verify_registration_signature()`, stops ingesting posts, and marks user inactive.
 
 ### Data types
 
+`RegistrationPayload` and `RegistrationRequest` go in the shared crate (`iroh-social-types/src/registration.rs`) since the client needs them to sign and send registration requests. `Registration` is server-only.
+
 ```rust
-struct RegistrationPayload {
-    pubkey: String,
-    server_url: String,
-    timestamp: u64,
+// In iroh-social-types/src/registration.rs (shared)
+// Uses pub signature_to_hex() and hex_to_signature() from signing.rs
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistrationPayload {
+    pub pubkey: String,
+    pub server_url: String,
+    pub timestamp: u64,
+    /// None for registration, Some("unregister") for unregistration.
+    pub action: Option<String>,
 }
 
-struct RegistrationRequest {
-    pubkey: String,
-    server_url: String,
-    timestamp: u64,
-    signature: String,  // hex-encoded ed25519 signature
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistrationRequest {
+    pub pubkey: String,
+    pub server_url: String,
+    pub timestamp: u64,
+    pub action: Option<String>,
+    pub signature: String,  // hex-encoded ed25519 signature
 }
 
+// Canonical signing bytes (same pattern as posts/interactions)
+fn registration_signing_bytes(pubkey: &str, server_url: &str, timestamp: u64, action: &Option<String>) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "pubkey": pubkey,
+        "server_url": server_url,
+        "timestamp": timestamp,
+        "action": action,
+    }))
+    .expect("json serialization should not fail")
+}
+
+pub fn sign_registration(payload: &RegistrationPayload, secret_key: &SecretKey) -> String {
+    let bytes = registration_signing_bytes(&payload.pubkey, &payload.server_url, payload.timestamp, &payload.action);
+    let sig = secret_key.sign(&bytes);
+    signature_to_hex(&sig)
+}
+
+pub fn verify_registration_signature(request: &RegistrationRequest) -> Result<(), String> {
+    let sig = hex_to_signature(&request.signature)?;
+    let pubkey: PublicKey = request.pubkey
+        .parse()
+        .map_err(|e| format!("invalid pubkey: {e}"))?;
+    let bytes = registration_signing_bytes(&request.pubkey, &request.server_url, request.timestamp, &request.action);
+    pubkey
+        .verify(&bytes, &sig)
+        .map_err(|_| "registration signature verification failed".to_string())
+}
+
+// Server-only
 struct Registration {
     pubkey: String,
     registered_at: u64,
@@ -181,9 +200,9 @@ struct Registration {
 
 Both mechanisms are needed for completeness:
 
-**Gossip (real-time):** When a user registers, the server subscribes to their gossip topic (`user_feed_topic(pubkey)`). This is the same subscription pattern used by the Tauri client in `gossip.rs`. The server receives `NewPost`, `DeletePost`, and `ProfileUpdate` messages in real time.
+**Gossip (real-time):** When a user registers, the server subscribes to their gossip topic (`user_feed_topic(pubkey)`). This is the same subscription pattern used by the Tauri client in `gossip.rs`. The server receives `NewPost`, `DeletePost` (signed), `ProfileUpdate`, `NewInteraction`, `DeleteInteraction` (signed), `LinkedDevices`, and `DeviceRevocation` messages in real time. Delete messages include `device_pubkey` and `signature` fields and must be verified before processing.
 
-**Sync (historical catch-up):** Uses the existing `fetch_remote_posts()` function from `sync.rs`. Triggered on:
+**Sync (historical catch-up):** Uses the same `SYNC_ALPN` (`b"iroh-social/sync/4"`) protocol and shared types (`SyncRequest`, `SyncSummary`, `SyncFrame`) from the types crate. The server implements its own sync client (it cannot reuse the Tauri-specific code directly, but the protocol is identical). `SyncFrame` includes a `DeviceAnnouncements` variant for exchanging cached `LinkedDevicesAnnouncement` data during sync -- this is critical for the server to obtain device certificates it may have missed via gossip (e.g., if the server started after the announcement was published). **Frame ordering**: `DeviceAnnouncements` frames are sent before `Posts` and `Interactions` frames, so the server has certificates cached before it needs to verify device-signed content. The `SyncSummary` also includes the user's `Profile`, which must be verified via `verify_profile_signature()` using the requested author as `expected_identity` before updating the registrations table. Triggered on:
 
 - Server startup (sync all registered users)
 - New user registration (sync their history immediately)
@@ -196,14 +215,19 @@ IngestionManager
   |
   +-- GossipSubscriber (per registered user)
   |     Subscribes to user_feed_topic(pubkey)
-  |     Processes NewPost, DeletePost, ProfileUpdate
-  |     Writes to SQLite
+  |     Processes all GossipMessage variants:
+  |       NewPost, DeletePost, ProfileUpdate,
+  |       NewInteraction, DeleteInteraction,
+  |       LinkedDevices, DeviceRevocation
+  |     Writes to sqlx database
   |
   +-- SyncScheduler
         On startup: sync all registered users
         Every 15 min: catch-up sync for stale users
         On registration: immediate history pull
         Bounded concurrency via semaphore (max 10)
+        Fallback: if primary device is offline, try
+          secondary devices from cached announcement
 ```
 
 ### Validation
@@ -211,40 +235,75 @@ IngestionManager
 Same checks as the Tauri client:
 
 - `validate_post()` (content length, media count, timestamp drift)
-- Author matches expected pubkey for the gossip topic
-- Deduplication via `(author, id)` unique constraint in SQLite
+- `validate_interaction()` (timestamp drift)
+- `validate_profile()` (display name length, bio length)
+- Deduplication via `(author, id)` unique constraint
+- Signature verification via `verify_post_signature()` / `verify_interaction_signature()` / `verify_profile_signature()` (includes device-aware two-step verification -- see below)
+
+**Per-variant gossip topic owner validation.** Each message received on `user_feed_topic(pubkey)` must be validated against the topic owner:
+
+| Variant | Validation |
+|---------|-----------|
+| `NewPost(post)` | `post.author` must equal topic owner |
+| `DeletePost { author, .. }` | `author` must equal topic owner; verify `signature` against `device_pubkey` (two-step chain) |
+| `ProfileUpdate(profile)` | No `author` field -- use topic owner as `expected_identity` for `verify_profile_signature()` |
+| `NewInteraction(interaction)` | `interaction.author` must equal topic owner |
+| `DeleteInteraction { author, .. }` | `author` must equal topic owner; verify `signature` against `device_pubkey` (two-step chain) |
+| `LinkedDevices(announcement)` | `announcement.identity_pubkey` must equal topic owner |
+| `DeviceRevocation(revocation)` | `revocation.identity_pubkey` must equal topic owner |
+
+### Device-Aware Verification
+
+When the linked-devices feature is active, posts and interactions may include a `device_pubkey` field indicating a secondary device signed the content. The server must handle this:
+
+1. **Cache device certificates**: When the server receives a `LinkedDevices(LinkedDevicesAnnouncement)` gossip message, it verifies the announcement signature against the identity pubkey, then caches all device certificates in the `peer_device_certificates` table.
+2. **Handle revocations**: When the server receives a `DeviceRevocation` gossip message, it verifies the signature, caches the revocation, and removes the device from the certificate cache. Future posts from the revoked device (with timestamps after the revocation) are rejected. Additionally, the server performs **retroactive cleanup**: it scans already-ingested posts and interactions where `device_pubkey == revoked_device_pubkey` and `timestamp > revocation.timestamp`, and deletes those records. This handles the race condition where a revoked device published content between revocation issuance and gossip propagation.
+3. **Two-step post/interaction verification**: When `device_pubkey` is present and differs from `author`:
+   - Step 1: Verify the content signature against the device's public key.
+   - Step 2: Look up the device's certificate in the cache and verify the certificate is valid (signed by the identity key, not expired, not revoked).
+   - If no certificate is cached, reject the post and log a warning. The certificate will arrive via gossip or sync and future posts will verify normally.
+4. **Primary device posts**: When `device_pubkey` is empty or equals `author`, fall back to direct signature verification (same as current behavior).
+5. **Profile verification**: Profile updates now include `device_pubkey` and `signature` fields. The server verifies profile updates using `verify_profile_signature()` with the expected identity (from the gossip topic or from the `SyncRequest.author` when received via sync). Both gossip-received and sync-received profiles must be verified before updating the registrations table.
+
+The shared crate's `verify_post_signature()`, `verify_interaction_signature()`, and `verify_profile_signature()` functions accept a `get_certificate: impl Fn(&str, &str) -> Option<DeviceCertificate>` callback. The server implements this callback by querying its sqlx `peer_device_certificates` table:
+
+```rust
+// Server-side certificate lookup for verification callbacks
+let get_cert = |identity: &str, device: &str| -> Option<DeviceCertificate> {
+    // Query peer_device_certificates table via sqlx
+    // Also check device_revocations to reject revoked devices
+    storage.get_peer_device_certificate(identity, device)
+        .ok()
+        .flatten()
+        .filter(|_| !storage.is_device_revoked(identity, device).unwrap_or(true))
+};
+```
 
 ---
 
 ## Server Storage
 
-### sqlx with SQLite + Postgres
+### sqlx with SQLite
 
-The server uses **sqlx** for database access, supporting both SQLite (simple self-hosting) and Postgres (high-scale deployments):
+The server uses **sqlx** with SQLite for storage:
 
-- **sqlx** provides async-native database access that fits naturally with the axum server
-- **Compile-time query checking** catches SQL errors at build time via `sqlx::query!` macros
-- **Start with SQLite** for easy self-hosting (single file, no external service, zero config)
-- **Migrate to Postgres** when scaling demands it -- change the connection string, run migrations, done
-- **Full-text search** via SQLite FTS5 or Postgres `tsvector`/`tsquery` (both supported behind a thin abstraction)
+- Async-native database access fits naturally with axum
+- Single file, no external service, zero config for self-hosting
+- FTS5 for full-text search
+- Connection pooling for concurrent HTTP request handling
 
 ### Why not rusqlite?
 
-The Tauri client uses rusqlite because it's an embedded single-user desktop app where async provides no benefit. The server is different:
-
-- axum is async -- sqlx queries compose naturally without `spawn_blocking`
-- Connection pooling matters for concurrent HTTP request handling
-- Postgres support provides a scaling path for large communities
-- Compile-time query checking is practical in a server build environment
+The Tauri client uses rusqlite because it's an embedded single-user desktop app where async provides no benefit. The server is different: axum is async, so sqlx queries compose naturally without `spawn_blocking`, and connection pooling matters for concurrent HTTP handling.
 
 ### Dependencies
 
 ```toml
 [dependencies]
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "postgres", "migrate"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
 ```
 
-### Schema (SQLite dialect -- Postgres uses equivalent types)
+### Schema
 
 ```sql
 CREATE TABLE registrations (
@@ -263,6 +322,12 @@ CREATE TABLE posts (
     content TEXT NOT NULL,
     timestamp INTEGER NOT NULL,
     media_json TEXT,
+    reply_to TEXT,
+    reply_to_author TEXT,
+    quote_of TEXT,
+    quote_of_author TEXT,
+    device_pubkey TEXT NOT NULL DEFAULT '',  -- empty or == author means primary device
+    signature TEXT NOT NULL DEFAULT '',
     indexed_at INTEGER NOT NULL,
     PRIMARY KEY (author, id),
     FOREIGN KEY (author) REFERENCES registrations(pubkey)
@@ -271,7 +336,31 @@ CREATE TABLE posts (
 CREATE INDEX idx_posts_timestamp ON posts(timestamp DESC);
 CREATE INDEX idx_posts_author_timestamp ON posts(author, timestamp DESC);
 
--- Full-text search (SQLite variant)
+-- NOTE: The FK constraint means only interactions from registered users are stored.
+-- The server subscribes to each registered user's gossip topic, which carries that
+-- user's own interactions (e.g., Alice's likes). Interactions from unregistered users
+-- (e.g., an unregistered Bob liking Alice's post) arrive on Bob's topic, which the
+-- server does not subscribe to. Consequently, like_count and other aggregate endpoints
+-- only reflect registered users' activity. This is intentional: the server is an
+-- overlay that indexes opted-in users, not a global aggregator.
+CREATE TABLE interactions (
+    id TEXT NOT NULL,
+    author TEXT NOT NULL,
+    kind TEXT NOT NULL,          -- 'Like', etc.
+    target_post_id TEXT NOT NULL,
+    target_author TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    device_pubkey TEXT NOT NULL DEFAULT '',
+    signature TEXT NOT NULL DEFAULT '',
+    indexed_at INTEGER NOT NULL,
+    PRIMARY KEY (author, id),
+    FOREIGN KEY (author) REFERENCES registrations(pubkey)
+);
+
+CREATE INDEX idx_interactions_target ON interactions(target_author, target_post_id);
+CREATE INDEX idx_interactions_author ON interactions(author, timestamp DESC);
+
+-- Full-text search
 CREATE VIRTUAL TABLE posts_fts USING fts5(
     content,
     content=posts,
@@ -287,11 +376,6 @@ CREATE TRIGGER posts_ad AFTER DELETE ON posts BEGIN
     INSERT INTO posts_fts(posts_fts, rowid, content) VALUES('delete', old.rowid, old.content);
 END;
 
--- Full-text search (Postgres variant, used instead of FTS5)
--- ALTER TABLE posts ADD COLUMN content_tsv tsvector
---     GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
--- CREATE INDEX idx_posts_fts ON posts USING GIN(content_tsv);
-
 CREATE TABLE trending_hashtags (
     tag TEXT PRIMARY KEY,
     post_count INTEGER NOT NULL,
@@ -305,28 +389,29 @@ CREATE TABLE sync_state (
     pubkey TEXT PRIMARY KEY,
     last_synced_at INTEGER NOT NULL,
     last_post_timestamp INTEGER,
+    last_interaction_timestamp INTEGER,
     FOREIGN KEY (pubkey) REFERENCES registrations(pubkey)
 );
 
-CREATE TABLE server_meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
+-- Cached device certificates for registered users (for verifying device-signed posts)
+CREATE TABLE peer_device_certificates (
+    identity_pubkey TEXT NOT NULL,
+    device_pubkey TEXT NOT NULL,
+    certificate_json TEXT NOT NULL,
+    announcement_version INTEGER NOT NULL DEFAULT 0,
+    cached_at INTEGER NOT NULL,
+    PRIMARY KEY (identity_pubkey, device_pubkey)
 );
+
+-- Cached device revocations (to reject posts from revoked devices)
+CREATE TABLE device_revocations (
+    identity_pubkey TEXT NOT NULL,
+    revoked_device_pubkey TEXT NOT NULL,
+    revoked_at INTEGER NOT NULL,
+    PRIMARY KEY (identity_pubkey, revoked_device_pubkey)
+);
+
 ```
-
-### Database abstraction
-
-The server uses sqlx's `Any` pool or a thin trait to abstract over SQLite and Postgres:
-
-```rust
-// Config determines which backend to use
-enum DatabaseUrl {
-    Sqlite(String),   // e.g. "sqlite:///var/lib/iroh-social/server.db"
-    Postgres(String), // e.g. "postgres://user:pass@localhost/iroh_social"
-}
-```
-
-Migrations are managed via `sqlx migrate` with separate migration directories for each backend where SQL differs (FTS5 vs tsvector).
 
 ---
 
@@ -352,12 +437,13 @@ Response: {
 
 ```
 POST /api/v1/register
-Body: { pubkey, server_url, timestamp, signature }
+Body: { pubkey, server_url, timestamp, action, signature }
 Response (201): { pubkey, registered_at, message }
 Errors: 400 (bad sig/timestamp), 409 (exists), 403 (closed)
 
 DELETE /api/v1/register
 Body: { pubkey, server_url, timestamp, action: "unregister", signature }
+Server verifies via verify_registration_signature() from shared crate.
 Response (200): { message }
 ```
 
@@ -382,6 +468,16 @@ Response: { posts: [...] }
 
 GET /api/v1/posts/search?q=rust+iroh&limit=20&offset=0
 Response: { posts: [...], total, query }
+```
+
+#### Interactions
+
+```
+GET /api/v1/users/:pubkey/interactions?limit=50&before=<timestamp>
+Response: { interactions: [...] }
+
+GET /api/v1/posts/:author/:post_id/interactions
+Response: { interactions: [...], like_count: number }
 ```
 
 #### Feed (Global)
@@ -604,26 +700,34 @@ Federation uses iroh's QUIC transport (not HTTP) for NAT traversal and consisten
 
 ## Implementation Roadmap
 
-### Phase 1: Workspace Refactor
+### Phase 1: Workspace Refactor (DONE)
 
-- [ ] Create workspace root `Cargo.toml`
-- [ ] Create `crates/iroh-social-types/` with types extracted from `src-tauri/src/storage.rs`, `gossip.rs`, `sync.rs`, `lib.rs`
-- [ ] Update `src-tauri/Cargo.toml` to use workspace deps and depend on shared crate
-- [ ] Verify Tauri app builds and runs unchanged
+- [x] Create workspace root `Cargo.toml`
+- [x] Create `crates/iroh-social-types/` with types extracted from `src-tauri/`
+- [x] Update `src-tauri/Cargo.toml` to use workspace deps and depend on shared crate
+- [x] Verify Tauri app builds and runs unchanged
 
 ### Phase 2: Server Core
 
 - [ ] Create `crates/iroh-social-server/` skeleton with `main.rs` and config
-- [ ] Implement sqlx storage layer with migrations (SQLite initially, Postgres-ready)
-- [ ] Set up full-text search (FTS5 for SQLite, tsvector for Postgres)
+- [ ] Implement sqlx storage layer with migrations (SQLite + FTS5)
 - [ ] Implement Iroh node setup (endpoint, gossip, sync handler -- no Tauri)
 - [ ] Implement registration verification (ed25519 signature check)
+- [ ] Implement device certificate caching and two-step verification for posts, interactions, and profiles (depends on linked-devices types)
+- [ ] Implement `get_certificate` callback against sqlx storage for use with shared verification functions
+- [ ] Handle `SyncFrame::DeviceAnnouncements` variant during sync to obtain missed device certificates (announcements are sent before posts/interactions per the frame ordering protocol)
+- [ ] Verify profile signatures received via sync (`SyncSummary.profile`) using `verify_profile_signature()` with `SyncRequest.author` as expected identity
+- [ ] Add `registration.rs` module to shared crate with `RegistrationPayload`, `RegistrationRequest`, `sign_registration()`, and `verify_registration_signature()` functions
 
 ### Phase 3: Server API + Ingestion
 
 - [ ] Set up axum with middleware (CORS, rate limiting, logging)
 - [ ] Implement endpoints: `/info`, `/register`, `/users`, `/feed`, `/posts/search`, `/trending`
+- [ ] Implement interaction endpoints: `/users/:pubkey/interactions`, `/posts/:author/:id/interactions`
 - [ ] Implement ingestion manager (gossip subscriber + sync scheduler)
+- [ ] Handle all gossip variants: `NewPost`, `DeletePost` (verify via `verify_delete_post_signature()`), `ProfileUpdate` (verify via `verify_profile_signature()`), `NewInteraction`, `DeleteInteraction` (verify via `verify_delete_interaction_signature()`), `LinkedDevices`, `DeviceRevocation`
+- [ ] Validate each gossip variant against the topic owner (per-variant author/identity matching)
+- [ ] Implement retroactive cleanup on `DeviceRevocation`: delete posts/interactions from revoked device with timestamps after revocation
 - [ ] Implement trending computation background task
 
 ### Phase 4: Client Integration
@@ -638,5 +742,6 @@ Federation uses iroh's QUIC transport (not HTTP) for NAT traversal and consisten
 
 - [ ] Error handling and logging
 - [ ] Server health check / metrics endpoint
+- [ ] Sync fallback to secondary devices: when sync to a user's primary device fails, attempt sync from secondary devices discovered via cached `LinkedDevicesAnnouncement`
 - [ ] Stub federation module with reserved ALPN
 - [ ] Documentation and deployment guide

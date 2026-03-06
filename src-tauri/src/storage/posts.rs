@@ -309,15 +309,4 @@ impl Storage {
         }
         Ok(posts)
     }
-
-    #[allow(dead_code)]
-    pub fn count_replies(&self, parent_post_id: &str) -> anyhow::Result<u64> {
-        let db = self.db.lock().unwrap();
-        let count: i64 = db.query_row(
-            "SELECT COUNT(*) FROM posts WHERE reply_to=?1",
-            params![parent_post_id],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
-    }
 }

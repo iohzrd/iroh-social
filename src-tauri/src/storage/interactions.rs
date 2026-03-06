@@ -114,42 +114,6 @@ impl Storage {
         })
     }
 
-    #[allow(dead_code)]
-    pub fn get_interactions_by_author(
-        &self,
-        author: &str,
-        limit: usize,
-        before: Option<u64>,
-    ) -> anyhow::Result<Vec<Interaction>> {
-        let db = self.db.lock().unwrap();
-        let mut interactions = Vec::new();
-        match before {
-            Some(b) => {
-                let mut stmt = db.prepare(
-                    "SELECT id, author, kind, target_post_id, target_author, timestamp, signature
-                     FROM interactions WHERE author=?1 AND timestamp < ?2
-                     ORDER BY timestamp DESC LIMIT ?3",
-                )?;
-                let mut rows = stmt.query(params![author, b as i64, limit as i64])?;
-                while let Some(row) = rows.next()? {
-                    interactions.push(Self::row_to_interaction(row)?);
-                }
-            }
-            None => {
-                let mut stmt = db.prepare(
-                    "SELECT id, author, kind, target_post_id, target_author, timestamp, signature
-                     FROM interactions WHERE author=?1
-                     ORDER BY timestamp DESC LIMIT ?2",
-                )?;
-                let mut rows = stmt.query(params![author, limit as i64])?;
-                while let Some(row) = rows.next()? {
-                    interactions.push(Self::row_to_interaction(row)?);
-                }
-            }
-        }
-        Ok(interactions)
-    }
-
     pub fn count_interactions_by_author(&self, author: &str) -> anyhow::Result<u64> {
         let db = self.db.lock().unwrap();
         let count: i64 = db.query_row(

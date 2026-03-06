@@ -20,8 +20,6 @@ use tauri::{AppHandle, Emitter};
 pub struct DmHandler {
     storage: Arc<Storage>,
     app_handle: AppHandle,
-    #[allow(dead_code)]
-    my_ed25519_secret: [u8; 32],
     my_x25519_private: [u8; 32],
     my_x25519_public: [u8; 32],
     my_pubkey_str: String,
@@ -39,7 +37,6 @@ impl DmHandler {
         Self {
             storage,
             app_handle,
-            my_ed25519_secret: ed25519_secret,
             my_x25519_private,
             my_x25519_public,
             my_pubkey_str,

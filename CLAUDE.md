@@ -2,7 +2,7 @@
 
 ## Rules
 
-- **NO BACKWARD COMPATIBILITY.** This is a greenfield project. Never add conditional logic, Option wrappers, migration shims, or any other accommodation for old data. When adding new fields, always include them unconditionally everywhere (signing bytes, serialization, queries, etc.).
+- **DON'T BOTHER WITH BACKWARD COMPATIBILITY.**
 - Always thoroghly study all existing code relavant to your current task before offering changes.
 - **NEVER USE EMOJIS** in code, documentation, commits, anywhere
 - Always use latest dependency versions.
