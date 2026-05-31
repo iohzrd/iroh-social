@@ -63,9 +63,9 @@ impl StageActor {
                     );
                 }
             }
-            StageControl::End { .. } => {
+            StageControl::End { .. }
                 // Only accept End from the host
-                if signed.sender_pubkey == stage.host_pubkey {
+                if signed.sender_pubkey == stage.host_pubkey => {
                     let stage_id = stage.stage_id.clone();
                     stage.cancel.cancel();
                     let cp = self.active.take().unwrap().control_plane;
@@ -75,7 +75,6 @@ impl StageActor {
                         .app_handle
                         .emit("stage-event", StageEvent::Ended { stage_id });
                 }
-            }
             StageControl::RaiseHand { pubkey, .. } => {
                 if let Some(p) = stage.participants.get_mut(pubkey.as_str()) {
                     p.hand_raised = true;
@@ -98,8 +97,8 @@ impl StageActor {
                     },
                 );
             }
-            StageControl::PromoteSpeaker { pubkey, .. } => {
-                if is_moderator(stage, &signed.sender_pubkey) {
+            StageControl::PromoteSpeaker { pubkey, .. }
+                if is_moderator(stage, &signed.sender_pubkey) => {
                     if let Some(p) = stage.participants.get_mut(pubkey.as_str()) {
                         p.role = StageRole::Speaker;
                     }
@@ -149,9 +148,8 @@ impl StageActor {
                         },
                     );
                 }
-            }
-            StageControl::DemoteSpeaker { pubkey, .. } => {
-                if is_moderator(stage, &signed.sender_pubkey) {
+            StageControl::DemoteSpeaker { pubkey, .. }
+                if is_moderator(stage, &signed.sender_pubkey) => {
                     if let Some(p) = stage.participants.get_mut(pubkey.as_str()) {
                         p.role = StageRole::Listener;
                     }
@@ -166,9 +164,8 @@ impl StageActor {
                         },
                     );
                 }
-            }
-            StageControl::MuteSpeaker { pubkey, .. } => {
-                if is_moderator(stage, &signed.sender_pubkey) {
+            StageControl::MuteSpeaker { pubkey, .. }
+                if is_moderator(stage, &signed.sender_pubkey) => {
                     if let Some(p) = stage.participants.get_mut(pubkey.as_str()) {
                         p.host_muted = true;
                     }
@@ -186,7 +183,6 @@ impl StageActor {
                         },
                     );
                 }
-            }
             StageControl::SelfMuteToggle { pubkey, muted, .. } => {
                 if let Some(p) = stage.participants.get_mut(pubkey.as_str()) {
                     p.self_muted = *muted;
@@ -205,8 +201,8 @@ impl StageActor {
                     },
                 );
             }
-            StageControl::Kick { pubkey, .. } => {
-                if is_moderator(stage, &signed.sender_pubkey) {
+            StageControl::Kick { pubkey, .. }
+                if is_moderator(stage, &signed.sender_pubkey) => {
                     stage.participants.remove(pubkey.as_str());
                     if pubkey == &stage.my_pubkey {
                         // We were kicked
@@ -225,7 +221,6 @@ impl StageActor {
                         );
                     }
                 }
-            }
             StageControl::Reaction { pubkey, emoji, .. } => {
                 let _ = self.app_handle.emit(
                     "stage-event",
@@ -305,9 +300,9 @@ impl StageActor {
                 relay_node_id,
                 listener_pubkeys,
                 ..
-            } => {
+            }
                 // Only accept relay assignments from the host
-                if signed.sender_pubkey == stage.host_pubkey {
+                if signed.sender_pubkey == stage.host_pubkey => {
                     let my_pubkey = stage.my_pubkey.clone();
                     if listener_pubkeys.contains(&my_pubkey) {
                         // Cancel the current listener pipeline and restart at the new relay
@@ -339,9 +334,8 @@ impl StageActor {
                         );
                     }
                 }
-            }
-            StageControl::Ban { pubkey, .. } => {
-                if signed.sender_pubkey == stage.host_pubkey {
+            StageControl::Ban { pubkey, .. }
+                if signed.sender_pubkey == stage.host_pubkey => {
                     if let Some(node_id) = stage
                         .participants
                         .get(pubkey.as_str())
@@ -366,7 +360,6 @@ impl StageActor {
                         );
                     }
                 }
-            }
             _ => {}
         }
     }

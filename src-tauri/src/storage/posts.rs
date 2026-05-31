@@ -64,7 +64,7 @@ impl Storage {
                     "SELECT p.id, p.author, p.content, p.timestamp, p.media_json, p.reply_to, p.reply_to_author, p.quote_of, p.quote_of_author, p.signature FROM posts p
                      WHERE p.timestamp < ?1 {hidden} ORDER BY p.timestamp DESC LIMIT ?2"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(b as i64)
                     .bind(q.limit as i64)
                     .fetch_all(&self.pool)
@@ -75,7 +75,7 @@ impl Storage {
                     "SELECT p.id, p.author, p.content, p.timestamp, p.media_json, p.reply_to, p.reply_to_author, p.quote_of, p.quote_of_author, p.signature FROM posts p
                      WHERE 1=1 {hidden} ORDER BY p.timestamp DESC LIMIT ?1"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(q.limit as i64)
                     .fetch_all(&self.pool)
                     .await?
@@ -158,7 +158,7 @@ impl Storage {
                     "SELECT id, author, content, timestamp, media_json, reply_to, reply_to_author, quote_of, quote_of_author, signature FROM posts
                      WHERE author=?1 AND timestamp < ?2{filter_clause} ORDER BY timestamp DESC LIMIT ?3"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(author)
                     .bind(b as i64)
                     .bind(limit as i64)
@@ -170,7 +170,7 @@ impl Storage {
                     "SELECT id, author, content, timestamp, media_json, reply_to, reply_to_author, quote_of, quote_of_author, signature FROM posts
                      WHERE author=?1{filter_clause} ORDER BY timestamp DESC LIMIT ?2"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(author)
                     .bind(limit as i64)
                     .fetch_all(&self.pool)
@@ -320,7 +320,7 @@ impl Storage {
                     "SELECT id, author, content, timestamp, media_json, reply_to, reply_to_author, quote_of, quote_of_author, signature FROM posts
                      WHERE reply_to=?1 AND timestamp < ?2 {hidden} ORDER BY timestamp ASC LIMIT ?3"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(parent_post_id)
                     .bind(b as i64)
                     .bind(limit as i64)
@@ -332,7 +332,7 @@ impl Storage {
                     "SELECT id, author, content, timestamp, media_json, reply_to, reply_to_author, quote_of, quote_of_author, signature FROM posts
                      WHERE reply_to=?1 {hidden} ORDER BY timestamp ASC LIMIT ?2"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(parent_post_id)
                     .bind(limit as i64)
                     .fetch_all(&self.pool)

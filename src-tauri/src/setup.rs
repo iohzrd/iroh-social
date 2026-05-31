@@ -132,10 +132,10 @@ async fn build_network_stack(
         ]);
 
     if mdns_enabled {
-        builder = builder.address_lookup(iroh::address_lookup::MdnsAddressLookup::builder());
+        builder = builder.address_lookup(iroh_mdns_address_lookup::MdnsAddressLookup::builder());
     }
     if dht_enabled {
-        builder = builder.address_lookup(iroh::address_lookup::DhtAddressLookup::builder());
+        builder = builder.address_lookup(iroh_mainline_address_lookup::DhtAddressLookup::builder());
     }
 
     let endpoint = builder.bind().await.expect("failed to bind iroh endpoint");

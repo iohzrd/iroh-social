@@ -115,13 +115,7 @@ impl StageActor {
                 // Uses tokio's blocking_recv/try_recv so no async runtime needed.
                 let muted_flag = host_muted_flag.clone();
                 std::thread::spawn(move || {
-                    let mut aec = match EchoCanceller::new() {
-                        Ok(a) => a,
-                        Err(e) => {
-                            log::error!("[stage-host] failed to create AEC: {e}");
-                            return;
-                        }
-                    };
+                    let mut aec = EchoCanceller::new();
                     while let Some(s) = cap_raw_rx.blocking_recv() {
                         while let Ok(r) = far_end_rx.try_recv() {
                             aec.render(&r);

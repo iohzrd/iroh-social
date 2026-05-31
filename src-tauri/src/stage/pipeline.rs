@@ -799,13 +799,7 @@ async fn run_speaker_once(
                 return;
             }
         };
-        let mut aec = match EchoCanceller::new() {
-            Ok(a) => a,
-            Err(e) => {
-                log::error!("[stage-speaker] failed to create AEC: {e}");
-                return;
-            }
-        };
+        let mut aec = EchoCanceller::new();
         while let Some(s) = cap_raw_rx.blocking_recv() {
             while let Ok(r) = far_end_rx.try_recv() {
                 aec.render(&r);

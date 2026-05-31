@@ -198,13 +198,7 @@ impl super::CallHandler {
         let aec_muted = muted.clone();
         let aec_cancel = session_cancel.clone();
         std::thread::spawn(move || {
-            let mut aec = match EchoCanceller::new() {
-                Ok(a) => a,
-                Err(e) => {
-                    log::error!("[call] failed to create AEC: {e}");
-                    return;
-                }
-            };
+            let mut aec = EchoCanceller::new();
             log::info!("[call] AEC thread started");
             while let Some(raw) = raw_mic_rx.blocking_recv() {
                 if aec_cancel.is_cancelled() {

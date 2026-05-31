@@ -20,7 +20,7 @@ impl Storage {
         hasher.update(actor.as_bytes());
         hasher.update(target_post_id.unwrap_or("").as_bytes());
         hasher.update(post_id.unwrap_or("").as_bytes());
-        let id = format!("{:x}", hasher.finalize());
+        let id = hex::encode(hasher.finalize());
         sqlx::query(
             "INSERT OR IGNORE INTO notifications (id, kind, actor, target_post_id, post_id, timestamp, read)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
@@ -50,7 +50,7 @@ impl Storage {
                      WHERE n.timestamp < ?1 {hidden}
                      ORDER BY n.timestamp DESC LIMIT ?2"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(b as i64)
                     .bind(limit as i64)
                     .fetch_all(&self.pool)
@@ -63,7 +63,7 @@ impl Storage {
                      WHERE 1=1 {hidden}
                      ORDER BY n.timestamp DESC LIMIT ?1"
                 );
-                sqlx::query(&sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(limit as i64)
                     .fetch_all(&self.pool)
                     .await?

@@ -16,7 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-aec3 = "0.1.7"
+aec3 = "0.2.0"
 base64 = "0.22"
 bip39 = { version = "2", features = ["zeroize"] }
 bytes = "1"
@@ -26,24 +26,27 @@ curve25519-dalek = { version = "4", default-features = false }
 futures-lite = "2"
 getrandom = "0.4.1"
 hex = "0.4.3"
-hkdf = "0.12"
-iroh = { version = "0.97.0", features = ["address-lookup-mdns", "address-lookup-pkarr-dht"] }
-iroh-blobs = { version = "0.99.0", features = ["fs-store"] }
+hkdf = "0.13"
+iroh = { version = "1.0.0-rc.1" }
+iroh-blobs = { version = "0.102.0", features = ["fs-store"] }
 iroh-gossip = { workspace = true }
+iroh-mainline-address-lookup = "0.3.0"
+iroh-mdns-address-lookup = "0.3.0"
 log = "0.4"
 mime_guess = "2.0.5"
 opus = "0.3"
 png = "0.18.1"
 proscenium-types = { path = "../crates/proscenium-types" }
 reqwest = { version = "0.13.2", default-features = false, features = ["json"] }
-ringbuf = "0.4"
+ringbuf = "0.5.0"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 snow = "0.10"
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
-tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-clipboard-manager = "2.3.2"
+sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite"] }
+tauri = { version = "2.11", features = ["tray-icon"] }
+tauri-plugin-clipboard-manager = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"

@@ -75,6 +75,8 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let mut builder = tauri::Builder::default();
 
     #[cfg(not(mobile))]

@@ -137,7 +137,9 @@ impl Storage {
         ];
         for table in tables {
             let sql = format!("DELETE FROM {table}");
-            sqlx::raw_sql(&sql).execute(&self.pool).await?;
+            sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+                .execute(&self.pool)
+                .await?;
         }
         Ok(())
     }
@@ -160,7 +162,9 @@ impl Storage {
                     .await?;
             if !already_applied {
                 println!("[storage] applying migration: {name}");
-                sqlx::raw_sql(sql).execute(pool).await?;
+                sqlx::raw_sql(sqlx::AssertSqlSafe(*sql))
+                    .execute(pool)
+                    .await?;
                 sqlx::query(
                     "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, strftime('%s', 'now'))",
                 )

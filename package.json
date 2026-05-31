@@ -1,6 +1,6 @@
 {
   "name": "proscenium",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "description": "",
   "type": "module",
   "scripts": {
@@ -16,11 +16,11 @@
   "dependencies": {
     "@svelte-put/qr": "^2.1.2",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-barcode-scanner": "^2.4.4",
+    "@tauri-apps/plugin-barcode-scanner": "^2.4.5",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
-    "@tauri-apps/plugin-deep-link": "^2.4.8",
-    "@tauri-apps/plugin-dialog": "^2.7.0",
-    "@tauri-apps/plugin-fs": "^2.5.0",
+    "@tauri-apps/plugin-deep-link": "^2.4.9",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-haptics": "^2.3.2",
     "@tauri-apps/plugin-notification": "^2",
     "@tauri-apps/plugin-opener": "^2",
@@ -29,13 +29,13 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "^2.57.0",
-    "@sveltejs/vite-plugin-svelte": "^7.0.0",
-    "@tauri-apps/cli": "^2.10.1",
-    "prettier-plugin-svelte": "^3.5.1",
-    "svelte": "^5.55.2",
-    "svelte-check": "^4.4.6",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.8"
+    "@sveltejs/kit": "^2.61.1",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@tauri-apps/cli": "^2.11.2",
+    "prettier-plugin-svelte": "^4.0.1",
+    "svelte": "^5.56.0",
+    "svelte-check": "^4.4.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14"
   }
 }

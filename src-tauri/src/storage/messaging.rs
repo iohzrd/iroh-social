@@ -14,7 +14,7 @@ impl Storage {
         hasher.update(keys[0].as_bytes());
         hasher.update(b":");
         hasher.update(keys[1].as_bytes());
-        format!("{:x}", hasher.finalize())
+        hex::encode(hasher.finalize())
     }
 
     pub async fn upsert_conversation(
