@@ -151,8 +151,7 @@
         class="textarea-base manual-input"
         bind:value={manualInput}
         placeholder="node_id, secret, relay_url (JSON)"
-        rows="4"
-      ></textarea>
+        rows="4"></textarea>
       <div class="modal-actions">
         <button class="modal-cancel" onclick={onclose}>Cancel</button>
         <button

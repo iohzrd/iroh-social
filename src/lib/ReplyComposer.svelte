@@ -71,8 +71,7 @@
     rows="1"
     onkeydown={handleKey}
     oninput={mention.handleInput}
-    use:autogrow
-  ></textarea>
+    use:autogrow></textarea>
   <div class="composer-actions">
     <button class="btn-cancel" onclick={oncancel}>Cancel</button>
     <button

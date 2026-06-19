@@ -132,8 +132,7 @@
       bind:value={bio}
       placeholder="Tell people about yourself (optional)"
       rows="3"
-      maxlength="300"
-    ></textarea>
+      maxlength="300"></textarea>
   </label>
 
   <div class="field">

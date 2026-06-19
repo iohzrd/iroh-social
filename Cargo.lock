@@ -5416,7 +5416,7 @@ dependencies = [
 
 [[package]]
 name = "proscenium"
-version = "0.2.28"
+version = "0.2.29"
 dependencies = [
  "aec3",
  "base64 0.22.1",
@@ -5472,7 +5472,7 @@ dependencies = [
 
 [[package]]
 name = "proscenium-types"
-version = "0.2.28"
+version = "0.2.29"
 dependencies = [
  "getrandom 0.4.3",
  "hex",

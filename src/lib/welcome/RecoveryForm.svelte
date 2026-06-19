@@ -58,8 +58,7 @@
         rows="4"
         autocapitalize="none"
         autocomplete="off"
-        spellcheck="false"
-      ></textarea>
+        spellcheck="false"></textarea>
     </label>
 
     {#if recoveryError}

@@ -181,8 +181,7 @@
     <textarea
       bind:value={editBio}
       placeholder="Tell the world about yourself..."
-      rows="3"
-    ></textarea>
+      rows="3"></textarea>
   </div>
 
   <div class="field">

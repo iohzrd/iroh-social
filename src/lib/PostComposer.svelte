@@ -142,8 +142,7 @@
     onkeydown={handleKey}
     oninput={mention.handleInput}
     onpaste={handlePaste}
-    use:autogrow
-  ></textarea>
+    use:autogrow></textarea>
   <div class="compose-meta">
     <span class="hint">Shift+Enter for newline</span>
     <span

@@ -151,8 +151,7 @@
     onkeydown={handleKeydown}
     oninput={handleInput}
     rows="1"
-    use:autogrow
-  ></textarea>
+    use:autogrow></textarea>
   <button
     class="btn-accent send-btn"
     onclick={send}
