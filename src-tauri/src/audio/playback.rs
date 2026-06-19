@@ -61,7 +61,7 @@ fn stream_config() -> StreamConfig {
 }
 
 /// Find an output device by name, falling back to the default.
-fn find_output_device(name: Option<&str>) -> Result<cpal::Device, cpal::BuildStreamError> {
+fn find_output_device(name: Option<&str>) -> Result<cpal::Device, cpal::Error> {
     let host = cpal::default_host();
     if let Some(name) = name {
         if let Some(device) = host
@@ -74,14 +74,14 @@ fn find_output_device(name: Option<&str>) -> Result<cpal::Device, cpal::BuildStr
         log::warn!("[audio-playback] device '{name}' not found, using default");
     }
     host.default_output_device()
-        .ok_or(cpal::BuildStreamError::DeviceNotAvailable)
+        .ok_or_else(|| cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable))
 }
 
 /// Build a new output stream + ring buffer pair.
 fn build_playback_stream(
     device_name_pref: Option<&str>,
     underruns: &Arc<AtomicUsize>,
-) -> Result<(ringbuf::HeapProd<f32>, cpal::Stream), cpal::BuildStreamError> {
+) -> Result<(ringbuf::HeapProd<f32>, cpal::Stream), cpal::Error> {
     let device = find_output_device(device_name_pref)?;
     let config = stream_config();
 
@@ -93,7 +93,7 @@ fn build_playback_stream(
     let underruns_cb = underruns.clone();
 
     let stream = device.build_output_stream(
-        &config,
+        config,
         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
             let available = cons.pop_slice(data);
             if available < data.len() {
@@ -104,22 +104,14 @@ fn build_playback_stream(
         |err| log::error!("[audio-playback] stream error: {err}"),
         None,
     )?;
-    stream
-        .play()
-        .map_err(|e| cpal::BuildStreamError::BackendSpecific {
-            err: cpal::BackendSpecificError {
-                description: e.to_string(),
-            },
-        })?;
+    stream.play()?;
 
     Ok((prod, stream))
 }
 
 impl AudioPlayback {
     /// Start playing audio on the specified device (or default if None).
-    pub fn start(
-        device_name_pref: Option<&str>,
-    ) -> Result<(PlaybackProducer, Self), cpal::BuildStreamError> {
+    pub fn start(device_name_pref: Option<&str>) -> Result<(PlaybackProducer, Self), cpal::Error> {
         let underruns = Arc::new(AtomicUsize::new(0));
         let (prod, stream) = build_playback_stream(device_name_pref, &underruns)?;
 
@@ -142,10 +134,7 @@ impl AudioPlayback {
     /// Switch to a different output device mid-stream. Builds a new stream
     /// and ring buffer, swaps the producer so the decode thread feeds the new
     /// buffer, then drops the old stream.
-    pub fn switch_device(
-        &mut self,
-        device_name_pref: Option<&str>,
-    ) -> Result<(), cpal::BuildStreamError> {
+    pub fn switch_device(&mut self, device_name_pref: Option<&str>) -> Result<(), cpal::Error> {
         let (new_prod, new_stream) = build_playback_stream(device_name_pref, &self.underruns)?;
         // Swap the producer under the lock so the decode thread starts
         // pushing into the new ring buffer immediately.

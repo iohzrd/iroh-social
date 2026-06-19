@@ -318,25 +318,6 @@
     position: relative;
   }
 
-  /* Proscenium arch spanning between the two sidebar pillars */
-  .main-column::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: var(--sidebar-width);
-    right: var(--right-sidebar-width);
-    height: 48px;
-    background: linear-gradient(
-      to bottom,
-      rgba(var(--accent-rgb), 0.22) 0%,
-      rgba(var(--accent-rgb), 0.05) 60%,
-      transparent 100%
-    );
-    z-index: var(--z-sidebar);
-    pointer-events: none;
-    display: none;
-  }
-
   main {
     max-width: var(--content-max-width);
     width: 100%;
@@ -387,22 +368,11 @@
     main {
       padding-bottom: var(--space-lg);
     }
-
-    /* Show arch with just left pillar on tablet */
-    .main-column::before {
-      display: block;
-      right: 0;
-    }
   }
 
   @media (min-width: 1150px) {
     .app-shell {
       padding-right: var(--right-sidebar-width);
-    }
-
-    /* Both pillars visible - arch spans between them */
-    .main-column::before {
-      right: var(--right-sidebar-width);
     }
   }
 </style>

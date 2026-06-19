@@ -35,7 +35,7 @@ pub fn device_name(device: &cpal::Device) -> String {
 }
 
 /// Find an input device by name, falling back to the default.
-fn find_input_device(name: Option<&str>) -> Result<cpal::Device, cpal::BuildStreamError> {
+fn find_input_device(name: Option<&str>) -> Result<cpal::Device, cpal::Error> {
     let host = cpal::default_host();
     if let Some(name) = name {
         if let Some(device) = host
@@ -48,33 +48,27 @@ fn find_input_device(name: Option<&str>) -> Result<cpal::Device, cpal::BuildStre
         log::warn!("[audio-capture] device '{name}' not found, using default");
     }
     host.default_input_device()
-        .ok_or(cpal::BuildStreamError::DeviceNotAvailable)
+        .ok_or_else(|| cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable))
 }
 
 fn build_capture_stream(
     tx: mpsc::Sender<Vec<f32>>,
     device_name_pref: Option<&str>,
-) -> Result<cpal::Stream, cpal::BuildStreamError> {
+) -> Result<cpal::Stream, cpal::Error> {
     let device = find_input_device(device_name_pref)?;
     let config = stream_config();
 
     log::info!("[audio-capture] device: {}", device_name(&device));
 
     let stream = device.build_input_stream(
-        &config,
+        config,
         move |data: &[f32], _: &cpal::InputCallbackInfo| {
             let _ = tx.try_send(data.to_vec());
         },
         |err| log::error!("[audio-capture] stream error: {err}"),
         None,
     )?;
-    stream
-        .play()
-        .map_err(|e| cpal::BuildStreamError::BackendSpecific {
-            err: cpal::BackendSpecificError {
-                description: e.to_string(),
-            },
-        })?;
+    stream.play()?;
     Ok(stream)
 }
 
@@ -84,7 +78,7 @@ impl AudioCapture {
     pub fn start(
         tx: mpsc::Sender<Vec<f32>>,
         device_name_pref: Option<&str>,
-    ) -> Result<Self, cpal::BuildStreamError> {
+    ) -> Result<Self, cpal::Error> {
         let stream = build_capture_stream(tx.clone(), device_name_pref)?;
         Ok(Self { stream, tx })
     }
@@ -92,10 +86,7 @@ impl AudioCapture {
     /// Switch to a different input device mid-stream. Builds the new stream
     /// first, then drops the old one. The mpsc channel stays the same so the
     /// encoder sees at most a brief pause in samples.
-    pub fn switch_device(
-        &mut self,
-        device_name_pref: Option<&str>,
-    ) -> Result<(), cpal::BuildStreamError> {
+    pub fn switch_device(&mut self, device_name_pref: Option<&str>) -> Result<(), cpal::Error> {
         let new_stream = build_capture_stream(self.tx.clone(), device_name_pref)?;
         self.stream = new_stream; // old stream dropped here
         Ok(())
