@@ -5,7 +5,7 @@ exclude = ["server"]
 
 [workspace.package]
 edition = "2024"
-version = "0.2.29"
+version = "0.2.30"
 
 [workspace.dependencies]
 iroh-gossip = "0.101.0"

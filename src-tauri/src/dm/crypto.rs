@@ -7,12 +7,12 @@ use proscenium_types::RatchetHeaderWire;
 /// Encrypt a ratchet state JSON string with ChaCha20Poly1305.
 /// Returns base64(nonce || ciphertext).
 pub(crate) fn seal_ratchet_state(key: &[u8; 32], plaintext: &str) -> Result<String, AppError> {
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+    let cipher = ChaCha20Poly1305::new(&Key::from(*key));
     let mut nonce_bytes = [0u8; 12];
     getrandom::fill(&mut nonce_bytes).expect("getrandom failed");
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
     let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_bytes())
+        .encrypt(&nonce, plaintext.as_bytes())
         .map_err(|_| AppError::Other("ratchet state encryption failed".into()))?;
     let mut blob = nonce_bytes.to_vec();
     blob.extend_from_slice(&ciphertext);
@@ -28,10 +28,11 @@ pub(crate) fn open_ratchet_state(key: &[u8; 32], stored: &str) -> Result<String,
         return Err(AppError::Other("ratchet state too short".into()));
     }
     let (nonce_bytes, ciphertext) = blob.split_at(12);
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let cipher = ChaCha20Poly1305::new(&Key::from(*key));
+    let nonce = Nonce::try_from(nonce_bytes)
+        .map_err(|_| AppError::Other("ratchet state nonce has invalid length".into()))?;
     let plaintext_bytes = cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|_| AppError::Other("ratchet state decryption failed".into()))?;
     String::from_utf8(plaintext_bytes)
         .map_err(|_| AppError::Other("ratchet state not valid UTF-8".into()))

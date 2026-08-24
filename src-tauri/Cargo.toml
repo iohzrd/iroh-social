@@ -16,25 +16,25 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-aec3 = "0.3.0"
-base64 = "0.22"
+aec3 = "0.3.2"
+base64 = "0.23"
 bip39 = { version = "2", features = ["zeroize"] }
 bytes = "1"
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 cpal = "0.18.1"
-curve25519-dalek = { version = "4", default-features = false }
+curve25519-dalek = { version = "5", default-features = false }
 futures-lite = "2"
 getrandom = "0.4.1"
 hex = "0.4.3"
 hkdf = "0.13"
-iroh = { version = "1.0.0" }
+iroh = "1.0.3"
 iroh-blobs = { version = "0.103.0", features = ["fs-store"] }
 iroh-gossip = { workspace = true }
-iroh-mainline-address-lookup = "0.4.0"
-iroh-mdns-address-lookup = "0.4.0"
+iroh-mainline-address-lookup = "0.5"
+iroh-mdns-address-lookup = "0.5"
 log = "0.4"
 mime_guess = "2.0.5"
-opus = "0.3"
+opus = "0.4"
 png = "0.18.1"
 proscenium-types = { path = "../crates/proscenium-types" }
 reqwest = { version = "0.13.2", default-features = false, features = ["json"] }
@@ -59,7 +59,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 urlencoding = "2"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
+x25519-dalek = { version = "3", features = ["static_secrets"] }
 zeroize = "1"
 
 [target.'cfg(target_os = "android")'.dependencies]

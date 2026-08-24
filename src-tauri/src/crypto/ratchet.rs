@@ -91,7 +91,7 @@ fn kdf_ck(chain_key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
 
 /// Encrypt plaintext using a message key (ChaCha20Poly1305).
 fn encrypt_message(key: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+    let cipher = ChaCha20Poly1305::new(&Key::from(*key));
     // Use a zero nonce since each message key is unique (used exactly once).
     let nonce = Nonce::default();
     cipher
@@ -101,7 +101,7 @@ fn encrypt_message(key: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
 
 /// Decrypt ciphertext using a message key (ChaCha20Poly1305).
 fn decrypt_message(key: &[u8; 32], ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+    let cipher = ChaCha20Poly1305::new(&Key::from(*key));
     let nonce = Nonce::default();
     cipher
         .decrypt(&nonce, ciphertext)

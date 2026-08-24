@@ -384,7 +384,7 @@ impl Storage {
                 )
             };
 
-            let mut query = sqlx::query_as::<_, StoredPost>(&sql);
+            let mut query = sqlx::query_as::<_, StoredPost>(sqlx::AssertSqlSafe(sql));
             query = query.bind(before.unwrap_or(i64::MAX));
             query = query.bind(limit);
             for author in author_list {

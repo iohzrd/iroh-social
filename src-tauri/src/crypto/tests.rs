@@ -27,7 +27,7 @@ fn test_ed25519_public_to_x25519() {
     // Derive ed25519 public key using ed25519-dalek-compatible method:
     // The public key is the compressed Edwards Y coordinate of the scalar * basepoint.
     // We use curve25519_dalek directly since we have it as a dependency.
-    let hash = Sha512::digest(&ed_secret);
+    let hash = Sha512::digest(ed_secret);
     let mut scalar_bytes = [0u8; 32];
     scalar_bytes.copy_from_slice(&hash[..32]);
     scalar_bytes[0] &= 248;

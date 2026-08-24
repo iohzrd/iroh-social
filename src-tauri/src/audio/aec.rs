@@ -1,3 +1,4 @@
+use aec3::api::EchoCanceller3Config;
 use aec3::api::control::EchoControl;
 use aec3::audio_processing::aec3::echo_canceller3::EchoCanceller3;
 use aec3::audio_processing::audio_buffer::AudioBuffer;
@@ -31,7 +32,7 @@ pub struct EchoCanceller {
 
 impl EchoCanceller {
     pub fn new() -> Self {
-        let config = EchoCanceller3::create_default_config(1, 1);
+        let config = EchoCanceller3Config::default();
         let inner = EchoCanceller3::new(config, 48_000, 1, 1);
         let stream_config = StreamConfig::new(48_000, 1, false);
         let render_audio = AudioBuffer::new(FRAME_SAMPLES, 1, FRAME_SAMPLES, 1, FRAME_SAMPLES);
